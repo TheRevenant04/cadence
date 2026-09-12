@@ -1,0 +1,1470 @@
+openapi: 3.1.0
+info:
+  title: Cadence Mini Kanban API
+  version: 1.0.0
+  description: |
+    HTTP + WebSocket API for the Cadence mini kanban board (v1).
+
+    Derived from the frontend API contract in `frontend/src/api/mock.ts`
+    and the spec in `_docs/specs.md`. All endpoints below the real-time
+    section are REST/JSON. Timestamps are RFC 3339 (UTC ISO-8601) strings.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development (FastAPI)
+
+tags:
+  - name: auth
+    description: Authentication, sessions and password flows
+  - name: users
+    description: User directory lookups
+  - name: boards
+    description: Board lifecycle, members, stats
+  - name: columns
+    description: Custom columns per board
+  - name: tags
+    description: Fixed tag set per board
+  - name: tasks
+    description: Task CRUD, movement and tagging
+  - name: comments
+    description: Plain-text task comments
+  - name: admin
+    description: Site administration
+  - name: realtime
+    description: WebSocket board updates
+
+x-tagGroups:
+  - name: API
+    tags:
+      - auth
+      - users
+      - boards
+      - columns
+      - tags
+      - tasks
+      - comments
+      - admin
+      - realtime
+
+paths:
+  /auth/login:
+    post:
+      summary: Sign in with email and password
+      operationId: authLogin
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Signed in. Returns the user and a bearer session token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+
+  /auth/signup:
+    post:
+      summary: Create an account and sign in
+      operationId: authSignup
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '200':
+          description: Account created. Returns the user and a bearer session token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /auth/logout:
+    post:
+      summary: Invalidate the current session token
+      operationId: authLogout
+      tags: [auth]
+      responses:
+        '204':
+          description: Session cleared.
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /auth/me:
+    get:
+      summary: Fetch the signed-in user
+      operationId: authMe
+      tags: [auth]
+      description: |
+        Returns the current user, or `user: null` when no (or an invalid)
+        bearer token is supplied. Used to bootstrap the app.
+      security: []
+      responses:
+        '200':
+          description: Current session state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+
+  /auth/change-password:
+    post:
+      summary: Change the current user's password
+      operationId: authChangePassword
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password updated.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /auth/reset-password/request:
+    post:
+      summary: Request a password reset token
+      operationId: authRequestPasswordReset
+      tags: [auth]
+      security: []
+      description: |
+        Emulates the email reset flow. In v1 the token and reset URL are
+        returned directly (the real service would log them instead).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetRequest'
+      responses:
+        '200':
+          description: Reset token issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetToken'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /auth/reset-password/confirm:
+    post:
+      summary: Set a new password with a reset token
+      operationId: authResetPassword
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: Password reset.
+        '400':
+          $ref: '#/components/responses/Error400'
+
+  /users/search:
+    get:
+      summary: Search the user directory
+      operationId: usersSearch
+      tags: [users]
+      description: |
+        Returns up to six active users matching `query` (substring on email),
+        excluding the caller and, when `board_id` is given, users who already
+        belong to that board. Used by the invite flow.
+      parameters:
+        - $ref: '#/components/parameters/QueryParam'
+        - $ref: '#/components/parameters/BoardIdQuery'
+      responses:
+        '200':
+          description: Matching users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSearchResult'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /boards:
+    get:
+      summary: List boards the caller can see
+      operationId: boardsList
+      tags: [boards]
+      description: Active (non-archived) boards the caller owns or belongs to, sorted by name.
+      responses:
+        '200':
+          description: Board summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BoardSummary'
+        '401':
+          $ref: '#/components/responses/Error401'
+    post:
+      summary: Create a board
+      operationId: boardsCreate
+      tags: [boards]
+      description: |
+        Creates a board owned by the caller. Columns default to
+        `To Do`, `In Progress`, `Done` unless `column_names` is supplied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardCreateInput'
+      responses:
+        '200':
+          description: The new board summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardSummary'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /boards/archived:
+    get:
+      summary: List archived boards
+      operationId: boardsListArchived
+      tags: [boards]
+      description: |
+        Archived boards visible to owners (or admins), sorted by creation
+        date (newest first). Non-owners receive an empty list.
+      responses:
+        '200':
+          description: Archived board summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BoardSummary'
+        '401':
+          $ref: '#/components/responses/Error401'
+
+  /boards/{board_id}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+    get:
+      summary: Get a board with columns, tags, members and tasks
+      operationId: boardsGet
+      tags: [boards]
+      description: |
+        Full board detail. Archived boards return 404 to anyone without
+        owner (or admin) access.
+      responses:
+        '200':
+          description: Board detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardDetail'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    patch:
+      summary: Rename a board
+      operationId: boardsRename
+      tags: [boards]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardRenameInput'
+      responses:
+        '204':
+          description: Board renamed.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    delete:
+      summary: Delete a board and all of its data
+      operationId: boardsDelete
+      tags: [boards]
+      description: |
+        Owner-only unless the caller is an admin. Cascades to columns,
+        tags, tasks, comments, activity and memberships.
+      responses:
+        '204':
+          description: Board deleted.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/archive:
+    post:
+      summary: Archive a board
+      operationId: boardsArchive
+      tags: [boards]
+      responses:
+        '204':
+          description: Board archived.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+
+  /boards/{board_id}/unarchive:
+    post:
+      summary: Restore an archived board
+      operationId: boardsUnarchive
+      tags: [boards]
+      responses:
+        '204':
+          description: Board restored.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+
+  /boards/{board_id}/stats:
+    get:
+      summary: Board statistics
+      operationId: boardsStats
+      tags: [boards]
+      description: Counts per column, assignee and tag, plus overdue totals.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: Board statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardStats'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/members:
+    post:
+      summary: Invite a user to the board
+      operationId: boardsInvite
+      tags: [boards]
+      description: |
+        Owner-only. Adds the user as editor/viewer, or updates an existing
+        non-owner membership. Returns all members of the board.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteInput'
+      responses:
+        '200':
+          description: Updated member list (sorted for display).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BoardMember'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/members/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      summary: Change a member's role
+      operationId: boardsUpdateMemberRole
+      tags: [boards]
+      description: Owner-only. The owner role cannot be changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRoleInput'
+      responses:
+        '204':
+          description: Role updated.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    delete:
+      summary: Remove a member from the board
+      operationId: boardsRemoveMember
+      tags: [boards]
+      description: |
+        Owner-only. Unassigns the member from any board tasks. The owner
+        cannot be removed.
+      responses:
+        '204':
+          description: Member removed.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/columns:
+    post:
+      summary: Add a column to the board
+      operationId: columnsAdd
+      tags: [columns]
+      description: Owner-only. Appended after the last column.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnNameInput'
+      responses:
+        '200':
+          description: The new column.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Column'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/columns/{column_id}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/ColumnId'
+    patch:
+      summary: Rename a column
+      operationId: columnsRename
+      tags: [columns]
+      description: Owner-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnNameInput'
+      responses:
+        '204':
+          description: Column renamed.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    delete:
+      summary: Delete a column (and its tasks)
+      operationId: columnsRemove
+      tags: [columns]
+      description: |
+        Owner-only. Deletes the column, its tasks and task metadata, then
+        renumbers remaining columns.
+      responses:
+        '204':
+          description: Column deleted.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/tags:
+    post:
+      summary: Add a tag to the board's fixed tag set
+      operationId: tagsAdd
+      tags: [tags]
+      description: Owner-only. Names are case-insensitively unique per board.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreateInput'
+      responses:
+        '200':
+          description: The new tag.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+
+  /boards/{board_id}/tags/{tag_id}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/TagId'
+    delete:
+      summary: Remove a tag from the board
+      operationId: tagsRemove
+      tags: [tags]
+      description: Owner-only. Also removes the tag from all tasks.
+      responses:
+        '204':
+          description: Tag removed.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/tasks:
+    post:
+      summary: Create a task
+      operationId: tasksCreate
+      tags: [tasks]
+      description: Editors and owners can create tasks.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateInput'
+      responses:
+        '200':
+          description: The created task with tags and assignee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskFull'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/tasks/{task_id}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      summary: Get a task with comments and activity
+      operationId: tasksGet
+      tags: [tasks]
+      responses:
+        '200':
+          description: Full task detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetail'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    patch:
+      summary: Update task fields
+      operationId: tasksUpdate
+      tags: [tasks]
+      description: Editors and owners can edit. Supports partial updates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateInput'
+      responses:
+        '200':
+          description: The updated task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskFull'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    delete:
+      summary: Delete a task
+      operationId: tasksDelete
+      tags: [tasks]
+      description: Editors and owners can delete. Also removes tags, comments and activity.
+      responses:
+        '204':
+          description: Task deleted.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/tasks/{task_id}/move:
+    post:
+      summary: Move or reorder a task
+      operationId: tasksMove
+      tags: [tasks]
+      description: |
+        Moves the task into `column_id` positioned before `before_task_id`
+        or after `after_task_id` (or to the end when neither is given).
+        Ranks use 10-digit zero-padded lexorank strings.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskMoveInput'
+      responses:
+        '200':
+          description: The moved task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskFull'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /boards/{board_id}/tasks/{task_id}/tags:
+    put:
+      summary: Replace the task's tag set
+      operationId: tasksSetTags
+      tags: [tasks]
+      description: |
+        Editors and owners. Tag ids outside the board's tag set are silently
+        ignored; duplicates are collapsed.
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagIdsInput'
+      responses:
+        '200':
+          description: The task with its updated tags.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskFull'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /tasks/{task_id}/comments:
+    post:
+      summary: Add a comment to a task
+      operationId: commentsCreate
+      tags: [comments]
+      description: Editors and owners can comment.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        '200':
+          description: The created comment with its author.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /comments/{comment_id}:
+    parameters:
+      - $ref: '#/components/parameters/CommentId'
+    patch:
+      summary: Edit a comment
+      operationId: commentsUpdate
+      tags: [comments]
+      description: |
+        Authors can edit their own comments; owners and admins can edit any
+        comment on the board. Viewers cannot edit comments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        '200':
+          description: The updated comment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+    delete:
+      summary: Delete a comment
+      operationId: commentsDelete
+      tags: [comments]
+      description: Authors, board owners and admins can delete comments.
+      responses:
+        '204':
+          description: Comment deleted.
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /admin/users:
+    get:
+      summary: List all users
+      operationId: adminListUsers
+      tags: [admin]
+      description: Admin-only. Sorted by email.
+      responses:
+        '200':
+          description: All users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+
+  /admin/users/{user_id}/active:
+    patch:
+      summary: Activate or deactivate a user
+      operationId: adminSetUserActive
+      tags: [admin]
+      description: Admin-only. Users cannot deactivate their own account.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserActiveInput'
+      responses:
+        '204':
+          description: User status updated.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+
+  /admin/boards:
+    get:
+      summary: List all boards with owner email
+      operationId: adminListBoards
+      tags: [admin]
+      description: Admin-only. Sorted by creation date (newest first).
+      responses:
+        '200':
+          description: All boards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminBoardSummary'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+
+  /realtime:
+    get:
+      summary: WebSocket endpoint for live board updates
+      operationId: realtimeConnect
+      tags: [realtime]
+      description: |
+        WebSocket handshake (not a JSON GET). Clients authenticate by
+        sending a JSON message of the form `{"type": "auth", "token": "..."}`
+        after connecting, then subscribe with
+        `{"type": "subscribe", "board_id": "..."}`.
+
+        The server broadcasts JSON events for a subscribed board:
+        `task_created`, `task_updated`, `task_moved`, `task_deleted`,
+        `comment_added`, `comment_edited`, `comment_deleted`, `updated`,
+        `columns_changed`, `tags_changed`, `members_changed` — each shaped as
+        `{ "kind": "board", "board_id": "...", "op": "<op>", "at": <ms> }`.
+
+        Global (non-board) `board_created`, `board_archived`,
+        `board_unarchived`, `board_deleted` events are sent to all
+        connections after subscribing to a board.
+      responses:
+        '200':
+          description: WebSocket upgrade. See description for the protocol.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Session token returned by login/signup.
+
+  parameters:
+    BoardId:
+      name: board_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Board id.
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Task id.
+    ColumnId:
+      name: column_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Column id.
+    TagId:
+      name: tag_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Tag id.
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: User id.
+    CommentId:
+      name: comment_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Comment id.
+    QueryParam:
+      name: query
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Substring to match against user emails.
+    BoardIdQuery:
+      name: board_id
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Exclude users who already belong to this board.
+
+  responses:
+    Error400:
+      description: Validation error or invalid payload.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Error401:
+      description: Not signed in.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Error403:
+      description: Insufficient permissions.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Error404:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Error409:
+      description: The resource already exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    ApiError:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: integer
+          example: 403
+        message:
+          type: string
+          example: 'Admin access required'
+
+    User:
+      type: object
+      required: [id, email, is_admin, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        is_admin:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      example:
+        email: alice@cadence.dev
+        password: Password123!
+
+    SignupRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: ≥ 12 chars, upper, lower, digit and special character.
+
+    AuthUser:
+      type: object
+      required: [user, token]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: Bearer session token for subsequent requests.
+
+    MeResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/User'
+            - type: 'null'
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+
+    ResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetToken:
+      type: object
+      required: [token, reset_url]
+      properties:
+        token:
+          type: string
+        reset_url:
+          type: string
+          format: uri
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+        new_password:
+          type: string
+
+    UserSearchResult:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+
+    BoardRole:
+      type: string
+      enum: [owner, editor, viewer]
+
+    BoardCreateInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        column_names:
+          type: array
+          items: { type: string }
+
+    BoardRenameInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    BoardSummary:
+      type: object
+      required:
+        - id
+        - name
+        - owner_id
+        - is_archived
+        - created_at
+        - updated_at
+        - role
+        - total_tasks
+        - overdue_tasks
+        - member_count
+      properties:
+        id: { type: string }
+        name: { type: string }
+        owner_id: { type: string }
+        is_archived: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        role:
+          $ref: '#/components/schemas/BoardRole'
+        total_tasks: { type: integer }
+        overdue_tasks: { type: integer }
+        member_count: { type: integer }
+
+    AdminBoardSummary:
+      allOf:
+        - $ref: '#/components/schemas/BoardSummary'
+        - type: object
+          required: [owner_email]
+          properties:
+            owner_email:
+              type: string
+              format: email
+
+    Column:
+      type: object
+      required: [id, board_id, name, position, created_at, updated_at]
+      properties:
+        id: { type: string }
+        board_id: { type: string }
+        name: { type: string }
+        position: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ColumnNameInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    Tag:
+      type: object
+      required: [id, board_id, name, color]
+      properties:
+        id: { type: string }
+        board_id: { type: string }
+        name: { type: string }
+        color:
+          type: string
+          nullable: true
+
+    TagCreateInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        color:
+          type: string
+          nullable: true
+
+    TagIdsInput:
+      type: object
+      required: [tag_ids]
+      properties:
+        tag_ids:
+          type: array
+          items: { type: string }
+
+    BoardMember:
+      type: object
+      required: [user_id, email, role]
+      properties:
+        user_id: { type: string }
+        email: { type: string, format: email }
+        role:
+          $ref: '#/components/schemas/BoardRole'
+
+    InviteInput:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [editor, viewer]
+
+    MemberRoleInput:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/BoardRole'
+
+    Task:
+      type: object
+      required: [id, column_id, title, description, due_date, assignee_id, rank, created_at, updated_at]
+      properties:
+        id: { type: string }
+        column_id: { type: string }
+        title: { type: string }
+        description:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        assignee_id:
+          type: string
+          nullable: true
+        rank:
+          type: string
+          description: 10-digit zero-padded lexorank.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TaskFull:
+      allOf:
+        - $ref: '#/components/schemas/Task'
+        - type: object
+          required: [tags, assignee]
+          properties:
+            tags:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+            assignee:
+              oneOf:
+                - $ref: '#/components/schemas/User'
+                - type: 'null'
+
+    Comment:
+      type: object
+      required: [id, task_id, user_id, content, created_at, updated_at, user]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        user_id: { type: string }
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        user:
+          $ref: '#/components/schemas/User'
+
+    CommentInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+
+    ActivityLog:
+      type: object
+      required: [id, task_id, user_id, action_type, action_details, human_readable_message, created_at, user]
+      properties:
+        id: { type: string }
+        task_id: { type: string }
+        user_id: { type: string }
+        action_type: { type: string }
+        action_details:
+          type: object
+          additionalProperties: true
+        human_readable_message: { type: string }
+        created_at: { type: string, format: date-time }
+        user:
+          $ref: '#/components/schemas/User'
+
+    TaskCreateInput:
+      type: object
+      required: [column_id, title]
+      properties:
+        column_id: { type: string }
+        title: { type: string }
+        description:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        assignee_id:
+          type: string
+          nullable: true
+        tag_ids:
+          type: array
+          items: { type: string }
+
+    TaskUpdateInput:
+      type: object
+      properties:
+        title: { type: string }
+        description:
+          type: string
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        assignee_id:
+          type: string
+          nullable: true
+
+    TaskMoveInput:
+      type: object
+      required: [column_id]
+      properties:
+        column_id: { type: string }
+        before_task_id:
+          type: string
+          nullable: true
+        after_task_id:
+          type: string
+          nullable: true
+
+    TaskDetail:
+      allOf:
+        - $ref: '#/components/schemas/TaskFull'
+        - type: object
+          required: [comments, activity]
+          properties:
+            comments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Comment'
+            activity:
+              type: array
+              items:
+                $ref: '#/components/schemas/ActivityLog'
+
+    BoardDetail:
+      allOf:
+        - $ref: '#/components/schemas/BoardSummary'
+        - type: object
+          required: [columns, tags, members, tasks]
+          properties:
+            columns:
+              type: array
+              items:
+                $ref: '#/components/schemas/Column'
+            tags:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+            members:
+              type: array
+              items:
+                $ref: '#/components/schemas/BoardMember'
+            tasks:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaskFull'
+
+    BoardStats:
+      type: object
+      required: [total_tasks, overdue_tasks, per_column, per_assignee, per_tag]
+      properties:
+        total_tasks: { type: integer }
+        overdue_tasks: { type: integer }
+        per_column:
+          type: array
+          items:
+            type: object
+            required: [column_id, name, count]
+            properties:
+              column_id: { type: string }
+              name: { type: string }
+              count: { type: integer }
+        per_assignee:
+          type: array
+          items:
+            type: object
+            required: [user_id, label, count]
+            properties:
+              user_id:
+                type: string
+                nullable: true
+              label: { type: string }
+              count: { type: integer }
+        per_tag:
+          type: array
+          items:
+            type: object
+            required: [tag_id, name, color, count]
+            properties:
+              tag_id:
+                type: string
+                nullable: true
+              name:
+                type: string
+                nullable: true
+              color:
+                type: string
+                nullable: true
+              count: { type: integer }
+
+    UserActiveInput:
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean }
+
+security:
+  - bearerAuth: []
