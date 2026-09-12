@@ -9,7 +9,9 @@
 - Use Docker Compose for local development: `docker compose up --build` to start all services (API, web, DB, backup).
 - For backend work, activate the Python venv or use `docker compose exec api bash` to run commands inside the API container.
 - Install Python deps with `uv sync` or `uv pip install -r requirements.txt`.
-- For frontend, use `pnpm install` in the `web/` directory, then `pnpm dev` for Vite dev server.
+- For frontend, from `frontend/`: `npm install`, then `npm run dev` for the Vite dev server (`pnpm` is not available on the dev machine).
+- Frontend scripts: `npm run dev` (Vite), `npm run build`, `npm run preview`, `npm run typecheck`, `npm test`.
+- Note: v1 currently ships the frontend only. The Python API, PostgreSQL, Docker Compose, and the `backup` service are NOT implemented yet — API/`Docker` commands below apply to the future backend.
 - Run backend tests with `pytest` from the `api/` directory; run frontend tests with `pnpm test` from `web/`.
 - Check the `docker-compose.yml` service names (`api`, `web`, `db`, `backup`) to target the right container.
 - Use `docker compose logs -f api` or `docker compose logs -f web` to tail logs during development.
@@ -21,11 +23,11 @@
 ## Testing instructions
 
 - Backend: run `pytest` from `api/` for full test suite. Use `pytest -k <test_name>` to focus on specific tests.
-- Frontend: run `pnpm test` from `web/` for Vitest/RTL tests. Use `pnpm vitest run -t "<test name>"` to focus.
+- Frontend: run `npm test` from `frontend/` for Vitest/RTL tests. Use `npm test -- -t "<test name>"` to focus.
 - For E2E (if Playwright is set up): run `pnpm playwright test` from `web/`.
 - Always run `pytest` and `pnpm test` before committing; all tests must pass.
 - Add or update tests for any new feature or bug fix, even if not explicitly requested.
-- After changing imports or moving files, run type checks: `mypy` (backend) and `pnpm tsc --noEmit` (frontend).
+- After changing imports or moving files, run type checks: `mypy` (backend) and `npm run typecheck` (frontend).
 - Ensure permission-related tests cover owner/editor/viewer scenarios for boards, tasks, and comments.
 
 ---
@@ -33,7 +35,7 @@
 ## PR instructions
 
 - Title format: `[mini-kanban] <Title>` (e.g., `[mini-kanban] Add task drag-and-drop`).
-- Always run `pytest` (backend) and `pnpm lint && pnpm test` (frontend) before committing.
+- Always run `pytest` (backend) and `npm test` (frontend) before committing.
 - Keep PRs focused on v1 scope only; do not introduce out-of-scope features.
 - Update `AGENTS.md` if you change any core assumption, workflow, or constraint.
 - Reference relevant sections of `AGENTS.md` in PR descriptions when implementing features.
@@ -45,7 +47,8 @@
 **Name:** Mini Kanban Board v1  
 **Goal:** A minimal but complete, multi-user Kanban board focused on polished task creation/organization and board setup/management.  
 **Deployment:** Local/dev only via Docker Compose.  
-**Stack:** Python + FastAPI, PostgreSQL, React + lightweight UI library (Radix/Headless) + Tailwind, WebSockets/SSE for real-time.
+**Stack:** Python + FastAPI, PostgreSQL, React + lightweight UI library (Radix/Headless) + Tailwind, WebSockets/SSE for real-time.  
+**Current status:** the interactive frontend lives in `frontend/`. All backend calls go through the single hub `frontend/src/api/index.ts`, currently backed by a local mock (`src/api/mock.ts`, persisted to `localStorage`, seeded demo accounts) so the whole product is usable without a server. The Python API, PostgreSQL, Docker, and scheduled backups are future work.
 
 ---
 
