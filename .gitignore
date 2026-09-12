@@ -6,6 +6,12 @@ coverage/
 *.log
 *.tsbuildinfo
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
 # Editor
 .idea/
 .vscode/
