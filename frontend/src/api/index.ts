@@ -3,27 +3,19 @@
  * Central API client — the ONLY module the UI imports for backend calls.
  * ============================================================================
  *
- * Everything the frontend needs from the server goes through `api`. Today the
- * handlers are backed by an in-memory/localStorage mock (`./mock.ts`) so the
- * whole product is interactive without a server.
+ * Everything the frontend needs from the server goes through `api`. The
+ * handlers talk to the FastAPI backend (`api/`) over HTTP + WebSocket: session
+ * tokens are stored in localStorage and sent as `Authorization: Bearer`,
+ * realtime updates arrive over a WebSocket connection. The method signatures
+ * match the original localStorage mock exactly, so the UI code does not change.
  *
- * When the real backend is ready, replace the mock handlers with `fetch()`
- * calls (or a generated client) — the method signatures stay identical, so the
- * UI code does not have to change.
- *
- * Example swap for boards.list():
- *   async list() {
- *     const res = await fetch('/api/boards', { credentials: 'include' })
- *     if (!res.ok) throw await toApiError(res)
- *     return res.json()
- *   }
+ * To run against the backend: `uvicorn app.app:app --port 8000` from `api/`.
+ * The backend base URL can be overridden with the `VITE_API_BASE` env var.
  */
 
-import { apiMock } from './mock'
-
-export { ApiError } from './mock'
+export { ApiError } from './errors'
+export { api } from './client'
+export type { ApiClient, AdminBoardSummary, UserSearchResult } from './client'
 export type { ApiMock } from './mock'
 
-export const api = apiMock
-
-export type Api = typeof api
+export type Api = import('./client').ApiClient

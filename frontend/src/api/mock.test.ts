@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { api, ApiError } from './index'
+import { apiMock as api, ApiError } from './mock'
 import { DEMO_PASSWORD, reset } from './db'
 
 async function login(email: string) {
