@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+*.log
+.vite
+
+# Mock persistence is stored in the browser (localStorage), nothing to ignore here.
