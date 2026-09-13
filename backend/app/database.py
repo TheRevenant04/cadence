@@ -10,6 +10,7 @@ import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 DEFAULT_URL = f"sqlite+aiosqlite:///{(Path(__file__).resolve().parent.parent / 'cadence.dev.db')}"
@@ -43,8 +44,23 @@ def set_database_url(url: str) -> None:
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        _engine = create_async_engine(_current_url or database_url())
+        url = _current_url or database_url()
+        engine = create_async_engine(url)
+        if url.startswith("sqlite"):
+            # Enforce FKs in SQLite the way Postgres does. Without this, the
+            # test suite misses flush-ordering bugs where a child row
+            # (activity_logs, task_tags, ...) is inserted before its parent.
+            _enable_sqlite_fks(engine)
+        _engine = engine
     return _engine
+
+
+def _enable_sqlite_fks(engine: AsyncEngine) -> None:
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_foreign_keys(dbapi_connection, _record):  # type: ignore[no-untyped-def]
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 async def dispose_engine() -> None:

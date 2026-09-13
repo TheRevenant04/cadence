@@ -19,6 +19,7 @@ import { Route as AuthedProfileRouteImport } from './routes/_authed.profile'
 import { Route as AuthedBoardsIndexRouteImport } from './routes/_authed.boards.index'
 import { Route as AuthedBoardsBoardIdRouteImport } from './routes/_authed.boards.$boardId'
 import { Route as AuthedBoardsArchivedRouteImport } from './routes/_authed.boards.archived'
+import { Route as AuthedBoardsBoardIdIndexRouteImport } from './routes/_authed.boards.$boardId.index'
 import { Route as AuthedBoardsBoardIdTasksTaskIdRouteImport } from './routes/_authed.boards.$boardId.tasks.$taskId'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -70,6 +71,12 @@ const AuthedBoardsArchivedRoute = AuthedBoardsArchivedRouteImport.update({
   path: '/boards/archived',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedBoardsBoardIdIndexRoute =
+  AuthedBoardsBoardIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthedBoardsBoardIdRoute,
+  } as any)
 const AuthedBoardsBoardIdTasksTaskIdRoute =
   AuthedBoardsBoardIdTasksTaskIdRouteImport.update({
     id: '/tasks/$taskId',
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/boards/$boardId': typeof AuthedBoardsBoardIdRouteWithChildren
   '/boards/archived': typeof AuthedBoardsArchivedRoute
   '/boards/': typeof AuthedBoardsIndexRoute
+  '/boards/$boardId/': typeof AuthedBoardsBoardIdIndexRoute
   '/boards/$boardId/tasks/$taskId': typeof AuthedBoardsBoardIdTasksTaskIdRoute
 }
 export interface FileRoutesByTo {
@@ -96,9 +104,9 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthedAdminRoute
   '/profile': typeof AuthedProfileRoute
   '/': typeof AuthedIndexRoute
-  '/boards/$boardId': typeof AuthedBoardsBoardIdRouteWithChildren
   '/boards/archived': typeof AuthedBoardsArchivedRoute
   '/boards': typeof AuthedBoardsIndexRoute
+  '/boards/$boardId': typeof AuthedBoardsBoardIdIndexRoute
   '/boards/$boardId/tasks/$taskId': typeof AuthedBoardsBoardIdTasksTaskIdRoute
 }
 export interface FileRoutesById {
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/_authed/boards/$boardId': typeof AuthedBoardsBoardIdRouteWithChildren
   '/_authed/boards/archived': typeof AuthedBoardsArchivedRoute
   '/_authed/boards/': typeof AuthedBoardsIndexRoute
+  '/_authed/boards/$boardId/': typeof AuthedBoardsBoardIdIndexRoute
   '/_authed/boards/$boardId/tasks/$taskId': typeof AuthedBoardsBoardIdTasksTaskIdRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/boards/$boardId'
     | '/boards/archived'
     | '/boards/'
+    | '/boards/$boardId/'
     | '/boards/$boardId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -136,9 +146,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/profile'
     | '/'
-    | '/boards/$boardId'
     | '/boards/archived'
     | '/boards'
+    | '/boards/$boardId'
     | '/boards/$boardId/tasks/$taskId'
   id:
     | '__root__'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/_authed/boards/$boardId'
     | '/_authed/boards/archived'
     | '/_authed/boards/'
+    | '/_authed/boards/$boardId/'
     | '/_authed/boards/$boardId/tasks/$taskId'
   fileRoutesById: FileRoutesById
 }
@@ -234,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedBoardsArchivedRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/boards/$boardId/': {
+      id: '/_authed/boards/$boardId/'
+      path: '/'
+      fullPath: '/boards/$boardId/'
+      preLoaderRoute: typeof AuthedBoardsBoardIdIndexRouteImport
+      parentRoute: typeof AuthedBoardsBoardIdRoute
+    }
     '/_authed/boards/$boardId/tasks/$taskId': {
       id: '/_authed/boards/$boardId/tasks/$taskId'
       path: '/tasks/$taskId'
@@ -245,10 +263,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedBoardsBoardIdRouteChildren {
+  AuthedBoardsBoardIdIndexRoute: typeof AuthedBoardsBoardIdIndexRoute
   AuthedBoardsBoardIdTasksTaskIdRoute: typeof AuthedBoardsBoardIdTasksTaskIdRoute
 }
 
 const AuthedBoardsBoardIdRouteChildren: AuthedBoardsBoardIdRouteChildren = {
+  AuthedBoardsBoardIdIndexRoute: AuthedBoardsBoardIdIndexRoute,
   AuthedBoardsBoardIdTasksTaskIdRoute: AuthedBoardsBoardIdTasksTaskIdRoute,
 }
 

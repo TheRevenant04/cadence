@@ -1,11 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { BoardPage } from '@/features/BoardPage'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authed/boards/$boardId')({
-  component: BoardRoute,
+  component: BoardLayout,
 })
 
-function BoardRoute() {
-  const { boardId } = Route.useParams()
-  return <BoardPage boardId={boardId} />
+function BoardLayout() {
+  return <Outlet />
 }

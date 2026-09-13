@@ -86,6 +86,10 @@ async def tasks_create(
         updated_at=now,
     )
     session.add(task)
+    # Postgres enforces FKs on each INSERT and SQLAlchemy's implicit flush order
+    # is not guaranteed to keep `tasks` ahead of `task_tags`/`activity_logs`;
+    # persist the parent first (same rationale as in seed.py).
+    await session.flush()
     if body.tag_ids:
         for gid in body.tag_ids:
             session.add(TaskTag(task_id=task.id, tag_id=gid))
