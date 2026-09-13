@@ -47,12 +47,14 @@ services:
 
   web:
     build:
-      context: ./web
+      context: ./frontend
       dockerfile: Dockerfile
       target: dev
     restart: unless-stopped
+    environment:
+      VITE_API_BASE: http://localhost:8000
     volumes:
-      - ./web/src:/srv/web/src
+      - ./frontend/src:/srv/web/src
     ports:
       - "5173:5173"
 

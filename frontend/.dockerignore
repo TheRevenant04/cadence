@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+*.log
+.vite
+.tanstack
+preview.err.log
+preview.out.log

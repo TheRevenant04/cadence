@@ -1,19 +1,16 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+    PYTHONUNBUFFERED=1
 
 WORKDIR /srv/api
 
-COPY . .
+COPY pyproject.toml uv.lock ./
 
-RUN python -m venv /opt/venv \
-    && pip install --upgrade pip \
-    && pip install uv \
+RUN pip install --upgrade pip uv \
     && uv sync --group dev --no-install-project
+
+COPY . .
 
 EXPOSE 8000
 

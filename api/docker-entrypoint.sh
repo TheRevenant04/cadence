@@ -6,10 +6,10 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 echo "Running Alembic migrations"
-alembic upgrade head
+uv run alembic upgrade head
 
 echo "Seeding demo data (idempotent)"
 uv run python -m app.seed
 
 echo "Starting Cadence API"
-exec uvicorn app.app:app --host 0.0.0.0 --port "${PORT:-8000}"
+exec uv run uvicorn app.app:app --host 0.0.0.0 --port "${PORT:-8000}"

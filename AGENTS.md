@@ -8,15 +8,16 @@
 
 - Use Docker Compose for local development: `docker compose up --build` to start all services (API, web, DB, backup).
 - For backend work, activate the Python venv or use `docker compose exec api bash` to run commands inside the API container.
-- Install Python deps with `uv sync` or `uv pip install -r requirements.txt`.
+- Install Python deps with `uv sync` or `uv pip install -r requirements.txt`. The API container runs via `uv run` against its project venv; `docker-entrypoint.sh` runs Alembic migrations (`uv run alembic upgrade head`) then seeds demo data (`uv run python -m app.seed`) before starting Uvicorn.
 - For frontend, from `frontend/`: `npm install`, then `npm run dev` for the Vite dev server (`pnpm` is not available on the dev machine).
-- Frontend scripts: `npm run dev` (Vite), `npm run build`, `npm run preview`, `npm run typecheck`, `npm test`.
-- Note: the UI talks to the FastAPI backend in `api/` (HTTP + WebSocket) through the single hub `frontend/src/api/index.ts` (HTTP client in `client.ts`). The backend base URL defaults to `http://localhost:8000` and can be overridden with `VITE_API_BASE`. A localStorage-backed mock still ships in `frontend/src/api/mock.ts` for reference/tests but is not used by the UI. PostgreSQL, Docker Compose, and the `backup` service are NOT implemented yet.
-- Run backend tests with `pytest` from the `api/` directory; run frontend tests with `pnpm test` from `web/`.
+- Frontend scripts: `npm run dev` (Vite), `npm run build`, `npm run preview`, `npm run typecheck`, `npm test`. The compose `web` service builds `frontend/Dockerfile` (dev target), runs Vite on `0.0.0.0:5173`, and bind-mounts `./frontend/src` for hot reload.
+- Note: the UI talks to the FastAPI backend in `api/` (HTTP + WebSocket) through the single hub `frontend/src/api/index.ts` (HTTP client in `client.ts`). The backend base URL defaults to `http://localhost:8000` and can be overridden with `VITE_API_BASE`. A localStorage-backed mock still ships in `frontend/src/api/mock.ts` for reference/tests but is not used by the UI. PostgreSQL and the `backup` service are implemented: `db` runs `postgres:16-alpine` with named volume `db_data`; `backup` runs hourly `pg_dump` (custom-format) into volume `backup_data` via `backup/backup.sh`, pruning dumps older than 30 days.
+- Run backend tests with `pytest` from the `api/` directory; run frontend tests with `npm test` from `frontend/`.
 - Check the `docker-compose.yml` service names (`api`, `web`, `db`, `backup`) to target the right container.
 - Use `docker compose logs -f api` or `docker compose logs -f web` to tail logs during development.
-- Database migrations managed via Alembic (or similar); run `alembic upgrade head` inside the API container after schema changes.
+- Database migrations managed via Alembic; the API container runs `alembic upgrade head` automatically at boot, so state the schema lives solely in `api/alembic/versions/` (do not create tables via `Base.metadata.create_all` for the compose DB).
 - Backups stored in a Docker volume; inspect with `docker compose exec backup ls /backups`.
+- The seeded demo login is `admin@cadence.dev` / `Password123!` (see `api/app/db.py`, `DEMO_PASSWORD`).
 
 ---
 
@@ -48,7 +49,7 @@
 **Goal:** A minimal but complete, multi-user Kanban board focused on polished task creation/organization and board setup/management.  
 **Deployment:** Local/dev only via Docker Compose.  
 **Stack:** Python + FastAPI, PostgreSQL, React + lightweight UI library (Radix/Headless) + Tailwind, WebSockets/SSE for real-time.  
-**Current status:** the interactive frontend lives in `frontend/`. All backend calls go through the single hub `frontend/src/api/index.ts`, which talks to the Python/FastAPI backend in `api/` over HTTP (`client.ts`) + WebSocket (`socket.ts`); session tokens are stored in localStorage. A localStorage-backed mock (`src/api/mock.ts`, seeded demo accounts) still ships for reference/tests. The backend is covered by pytest and the client by Vitest. PostgreSQL, Docker Compose, and scheduled backups are future work.
+**Current status:** the interactive frontend lives in `frontend/`. All backend calls go through the single hub `frontend/src/api/index.ts`, which talks to the Python/FastAPI backend in `api/` over HTTP (`client.ts`) + WebSocket (`socket.ts`); session tokens are stored in localStorage. A localStorage-backed mock (`src/api/mock.ts`, seeded demo accounts) still ships for reference/tests. The backend is covered by pytest and the client by Vitest. PostgreSQL, Docker Compose, and scheduled backups are implemented and are the primary local-dev workflow (`docker compose up --build`).
 
 ---
 
