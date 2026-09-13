@@ -3,7 +3,7 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-WORKDIR /srv/api
+WORKDIR /srv/backend
 
 COPY pyproject.toml uv.lock ./
 
@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8000
 
-ENTRYPOINT ["/srv/api/docker-entrypoint.sh"]
+ENTRYPOINT ["/srv/backend/docker-entrypoint.sh"]
