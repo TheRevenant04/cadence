@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cadence
+      POSTGRES_PASSWORD: cadence
+      POSTGRES_DB: cadence
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cadence -d cadence"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "5432:5432"
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: cadence
+      PGPASSWORD: cadence
+      PGDATABASE: cadence
+    volumes:
+      - backup_data:/backups
+      - ./backup/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cadence:cadence@db:5432/cadence
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    volumes:
+      - ./web/src:/srv/web/src
+    ports:
+      - "5173:5173"
+
+volumes:
+  db_data:
+  backup_data:

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import secrets
-from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db import db
+from .database import SESSIONS, get_session
 from .errors import ApiError
+from .models import User
 
 
 def get_bearer(request: Request) -> str | None:
@@ -23,30 +24,34 @@ def get_bearer(request: Request) -> str | None:
 
 def issue_token(user_id: str) -> str:
     token = secrets.token_urlsafe(32)
-    db.sessions[token] = user_id
+    SESSIONS[token] = user_id
     return token
 
 
-def current_user(request: Request) -> dict[str, Any]:
+def revoke_token(token: str) -> None:
+    SESSIONS.pop(token, None)
+
+
+async def current_user(request: Request, session: AsyncSession = Depends(get_session)) -> User:
     token = get_bearer(request)
-    if not token or token not in db.sessions:
+    if not token or token not in SESSIONS:
         raise ApiError(401, "You are not signed in")
-    user = next((u for u in db.users if u["id"] == db.sessions[token]), None)
-    if not user or not user["is_active"]:
+    user = await session.get(User, SESSIONS[token])
+    if not user or not user.is_active:
         raise ApiError(403, "Your account has been deactivated")
     return user
 
 
 def current_token(request: Request) -> str:
     token = get_bearer(request)
-    if not token or token not in db.sessions:
+    if not token or token not in SESSIONS:
         raise ApiError(401, "You are not signed in")
     return token
 
 
-def optional_current_user(request: Request) -> dict[str, Any] | None:
+async def optional_current_user(request: Request, session: AsyncSession = Depends(get_session)) -> User | None:
     token = get_bearer(request)
-    if not token or token not in db.sessions:
+    if not token or token not in SESSIONS:
         return None
-    user = next((u for u in db.users if u["id"] == db.sessions[token]), None)
-    return user if user and user["is_active"] else None
+    user = await session.get(User, SESSIONS[token])
+    return user if user and user.is_active else None

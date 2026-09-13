@@ -1,16 +1,20 @@
 [project]
 name = "cadence-api"
 version = "0.1.0"
-description = "FastAPI backend for the Cadence mini kanban board (v1). Contract documented in openapi.yaml; data lives in an in-memory mock database."
+description = "FastAPI backend for the Cadence mini kanban board (v1). Contract documented in openapi.yaml; data persists in PostgreSQL (or SQLite for dev/tests)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.16.1",
+    "asyncpg>=0.30.0",
     "fastapi>=0.141.1",
+    "sqlalchemy[asyncio]>=2.0.41",
     "uvicorn[standard]>=0.52.4",
 ]
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.21.0",
     "httpx>=0.28.1",
     "mypy>=1.18",
     "pytest>=9.1.1",

@@ -1,9 +1,8 @@
-"""In-memory mock database for Cadence v1.
+"""Seed data and small helpers for the Cadence v1 database.
 
-Mirrors the seed data and record shapes of `frontend/src/api/db.ts` so the
-behaviour of the HTTP API matches the frontend's mock backend. Records are
-plain dicts; timestamps are ISO-8601 strings. Sessions and reset tokens are
-kept in this store too. This module will be replaced by PostgreSQL later.
+Records mirror the shapes of `frontend/src/api/db.ts` so the HTTP API behaves
+like the frontend's original mock backend. `seed.py` converts these plain
+dicts into ORM rows on first boot.
 """
 
 from __future__ import annotations
@@ -59,14 +58,14 @@ def _seed() -> dict[str, Any]:
     ]
 
     members = [
-        {"board_id": "b-launch", "user_id": "u-admin", "role": "owner"},
-        {"board_id": "b-launch", "user_id": "u-alice", "role": "editor"},
-        {"board_id": "b-launch", "user_id": "u-bob", "role": "viewer"},
-        {"board_id": "b-engine", "user_id": "u-alice", "role": "owner"},
-        {"board_id": "b-engine", "user_id": "u-admin", "role": "editor"},
-        {"board_id": "b-engine", "user_id": "u-bob", "role": "viewer"},
-        {"board_id": "b-engine", "user_id": "u-carol", "role": "editor"},
-        {"board_id": "b-archive", "user_id": "u-admin", "role": "owner"},
+        {"id": "m-1", "board_id": "b-launch", "user_id": "u-admin", "role": "owner"},
+        {"id": "m-2", "board_id": "b-launch", "user_id": "u-alice", "role": "editor"},
+        {"id": "m-3", "board_id": "b-launch", "user_id": "u-bob", "role": "viewer"},
+        {"id": "m-4", "board_id": "b-engine", "user_id": "u-alice", "role": "owner"},
+        {"id": "m-5", "board_id": "b-engine", "user_id": "u-admin", "role": "editor"},
+        {"id": "m-6", "board_id": "b-engine", "user_id": "u-bob", "role": "viewer"},
+        {"id": "m-7", "board_id": "b-engine", "user_id": "u-carol", "role": "editor"},
+        {"id": "m-8", "board_id": "b-archive", "user_id": "u-admin", "role": "owner"},
     ]
 
     def col(cid: str, board_id: str, name: str, position: int) -> dict[str, Any]:
@@ -194,7 +193,14 @@ def _seed() -> dict[str, Any]:
         comment("cm-3", "t-1", "u-bob", "E2E for drag-drop is deferred, but happy to review the interactions.", 2),
     ]
 
-    def ml(task_ids, user_id, action_type, details, message, mins_ago: int) -> list[dict[str, Any]]:
+    def ml(
+        task_ids: str | list[str],
+        user_id: str,
+        action_type: str,
+        details: dict[str, Any],
+        message: str,
+        mins_ago: int,
+    ) -> list[dict[str, Any]]:
         ids = task_ids if isinstance(task_ids, list) else [task_ids]
         out = []
         for i, tid in enumerate(ids):
@@ -229,100 +235,4 @@ def _seed() -> dict[str, Any]:
         "comments": comments,
         "activity": activity,
         "resets": [],
-        "sessions": {},
-        "seq": 100,
     }
-
-
-class Database:
-    """A single mutable in-memory store shared by all route handlers."""
-
-    def __init__(self) -> None:
-        self.data: dict[str, Any] = _seed()
-
-    def reset(self) -> None:
-        self.data = _seed()
-
-    # Convenience accessors -------------------------------------------------
-    @property
-    def users(self) -> list[dict[str, Any]]:
-        return self.data["users"]
-
-    @users.setter
-    def users(self, value: list[dict[str, Any]]) -> None:
-        self.data["users"] = value
-
-    @property
-    def boards(self) -> list[dict[str, Any]]:
-        return self.data["boards"]
-
-    @boards.setter
-    def boards(self, value: list[dict[str, Any]]) -> None:
-        self.data["boards"] = value
-
-    @property
-    def members(self) -> list[dict[str, Any]]:
-        return self.data["members"]
-
-    @members.setter
-    def members(self, value: list[dict[str, Any]]) -> None:
-        self.data["members"] = value
-
-    @property
-    def columns(self) -> list[dict[str, Any]]:
-        return self.data["columns"]
-
-    @columns.setter
-    def columns(self, value: list[dict[str, Any]]) -> None:
-        self.data["columns"] = value
-
-    @property
-    def tags(self) -> list[dict[str, Any]]:
-        return self.data["tags"]
-
-    @tags.setter
-    def tags(self, value: list[dict[str, Any]]) -> None:
-        self.data["tags"] = value
-
-    @property
-    def tasks(self) -> list[dict[str, Any]]:
-        return self.data["tasks"]
-
-    @tasks.setter
-    def tasks(self, value: list[dict[str, Any]]) -> None:
-        self.data["tasks"] = value
-
-    @property
-    def task_tags(self) -> list[dict[str, Any]]:
-        return self.data["task_tags"]
-
-    @task_tags.setter
-    def task_tags(self, value: list[dict[str, Any]]) -> None:
-        self.data["task_tags"] = value
-
-    @property
-    def comments(self) -> list[dict[str, Any]]:
-        return self.data["comments"]
-
-    @comments.setter
-    def comments(self, value: list[dict[str, Any]]) -> None:
-        self.data["comments"] = value
-
-    @property
-    def activity(self) -> list[dict[str, Any]]:
-        return self.data["activity"]
-
-    @activity.setter
-    def activity(self, value: list[dict[str, Any]]) -> None:
-        self.data["activity"] = value
-
-    @property
-    def resets(self) -> list[dict[str, Any]]:
-        return self.data["resets"]
-
-    @property
-    def sessions(self) -> dict[str, str]:
-        return self.data["sessions"]
-
-
-db = Database()

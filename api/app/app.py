@@ -6,6 +6,9 @@ always use the `{status, message}` shape the frontend expects.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +16,13 @@ from fastapi.responses import JSONResponse
 
 from .errors import ApiError
 from .routes import admin, auth, boards, columns, comments, realtime, tags, tasks, users
+from .seed import init_db
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await init_db()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -20,7 +30,9 @@ def create_app() -> FastAPI:
         title="Cadence Mini Kanban API",
         version="1.0.0",
         description="FastAPI backend for the Cadence mini kanban board (v1). "
-        "Contract documented in openapi.yaml; data lives in an in-memory mock database.",
+        "Contract documented in openapi.yaml; data persists in PostgreSQL "
+        "(or a local SQLite file when DATABASE_URL is unset).",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
